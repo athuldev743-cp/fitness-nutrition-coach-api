@@ -113,3 +113,37 @@ def test_agent_identity_is_validated():
         MultiAgentOrchestrator(
             StubAgent(AgentName.NUTRITION), StubAgent(AgentName.NUTRITION)
         )
+
+
+def test_forcing_nutrition_skips_keyword_routing():
+    fitness, nutrition = StubAgent(AgentName.FITNESS), StubAgent(AgentName.NUTRITION)
+    result = make_graph(fitness, nutrition).invoke(request("Hello there"), force=AgentName.NUTRITION)
+
+    assert result.agent is AgentName.NUTRITION
+    assert (fitness.calls, nutrition.calls) == (0, 1)
+
+
+def test_forcing_an_agent_overrides_a_mixed_request():
+    fitness, nutrition = StubAgent(AgentName.FITNESS), StubAgent(AgentName.NUTRITION)
+    result = make_graph(fitness, nutrition).invoke(
+        request("Create a workout and suggest meals for recovery"), force=AgentName.NUTRITION
+    )
+
+    assert result.agent is AgentName.NUTRITION
+    assert (fitness.calls, nutrition.calls) == (0, 1)
+
+
+def test_forcing_fitness_ignores_nutrition_keywords():
+    fitness, nutrition = StubAgent(AgentName.FITNESS), StubAgent(AgentName.NUTRITION)
+    result = make_graph(fitness, nutrition).invoke(request("How much protein do I need?"), force=AgentName.FITNESS)
+
+    assert result.agent is AgentName.FITNESS
+    assert (fitness.calls, nutrition.calls) == (1, 0)
+
+
+def test_without_force_the_keyword_routing_is_unchanged():
+    fitness, nutrition = StubAgent(AgentName.FITNESS), StubAgent(AgentName.NUTRITION)
+    result = make_graph(fitness, nutrition).invoke(request("Hello there"))
+
+    assert result.status is AgentStatus.NEEDS_CLARIFICATION
+    assert (fitness.calls, nutrition.calls) == (0, 0)
