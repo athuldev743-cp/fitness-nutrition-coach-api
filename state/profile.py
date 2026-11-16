@@ -78,3 +78,14 @@ class UserProfile(BaseModel):
         if unknown:
             raise ValueError(f"unknown limitation: {sorted(unknown)}")
         return cleaned
+
+
+def merged_profile(existing, patch):
+    """Apply only the fields a client actually sent on top of the saved profile.
+
+    A client that does not know about a field (for example an older app without the
+    nutrition preferences) must not reset it to its default.
+    """
+    base = existing.model_dump() if existing is not None else {}
+    base.update(patch)
+    return UserProfile(**base)

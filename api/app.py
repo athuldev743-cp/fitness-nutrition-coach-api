@@ -364,7 +364,8 @@ def get_profile(user: str = Depends(current_user)):
 def put_profile(body: ProfileIn, user: str = Depends(current_user)):
     s = stores(user)
     try:
-        s["profile"].save(UserProfile(**body.model_dump()))
+        from state.profile import merged_profile
+        s["profile"].save(merged_profile(s["profile"].get(), body.model_dump(exclude_unset=True)))
         return {"status": "saved"}
     finally:
         close(s)
