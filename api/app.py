@@ -163,7 +163,7 @@ def run_chat(user, text, today=None, agent=None):
     from agent.dispatcher import handle_message
     from agent.fitness_adapter import FitnessAgentAdapter
     from agent.nutrition import NutritionAgent
-    from agent.orchestrator import MultiAgentOrchestrator
+    from agent.orchestrator import MultiAgentOrchestrator, classify_request
 
     s = stores(user)
     try:
@@ -179,11 +179,17 @@ def run_chat(user, text, today=None, agent=None):
             FitnessAgentAdapter(fitness_handler),
             NutritionAgent(model()),
         )
+        from agent.training_context import build_training_context
+        wants_nutrition = agent == "nutrition" or (
+            agent is None and AgentName.NUTRITION in classify_request(text)
+        )
+        training = build_training_context(s["programs"], today or date.today()) if wants_nutrition else None
         request = AgentRequest(
             user_id=user,
             message=text,
             profile=profile,
             today=today or date.today(),
+            training_context=training,
         )
         result = graph.invoke(request, force=AgentName(agent) if agent else None)
         fitness_meta = result.metadata.get("fitness", result.metadata)
