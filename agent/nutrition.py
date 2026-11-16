@@ -172,6 +172,7 @@ class NutritionAgent:
 
         context = "\n\n".join(context_parts)[:MAX_CONTEXT_CHARS]
         profile_context = self._format_profile(request.profile)
+        training_section = self._format_training(request.training_context)
         allowed = {f"S{i}" for i in range(1, len(evidence) + 1)}
         last_diagnostic: dict[str, Any] = {}
         served_by: list[dict[str, Any]] = []
@@ -181,9 +182,10 @@ class NutritionAgent:
                 messages = [
                     {"role": "system", "content": (
                         SYSTEM_PROMPT
-                        + ("\n\nFACTS:" if request.profile is not None else "")
+                        + ("\n\nFACTS:" if (request.profile is not None or request.training_context is not None) else "")
                         + "\n\nUSER PROFILE (saved, user-provided data):\n"
                         + profile_context
+                        + training_section
                         + "\n\nRETRIEVED EVIDENCE:\n"
                         + context
                     )},
@@ -315,6 +317,18 @@ class NutritionAgent:
             "daily_food_budget_inr": profile.daily_food_budget_inr,
         }
         return json.dumps(profile_data, ensure_ascii=False)
+
+    @staticmethod
+    def _format_training(context) -> str:
+        if context is None:
+            return ""
+        return (
+            "\n\nTRAINING CONTEXT (from the user's saved workout plan; it is not evidence and "
+            "must never be cited):\n"
+            + json.dumps(context.model_dump(exclude_none=True), ensure_ascii=False)
+            + "\nUse it only to tailor timing and practical tips, such as food around a planned "
+            "session. Do not derive calorie, macro or supplement numbers from it."
+        )
 
     def _result(
         self,

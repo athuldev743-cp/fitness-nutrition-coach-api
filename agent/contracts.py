@@ -5,6 +5,7 @@ of LangGraph, MCP and any transport protocol.
 """
 from datetime import date
 from enum import Enum
+from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -44,6 +45,19 @@ class EvidenceReference(BaseModel):
         return value
 
 
+class TrainingContext(BaseModel):
+    """Whitelisted facts from the user's saved workout plan, built by code and never by a model."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    sessions_per_week: int | None = Field(default=None, ge=1, le=7)
+    today: Literal["training_day_planned", "training_day_done", "rest_day"]
+    today_session: str | None = Field(default=None, max_length=60)
+    today_minutes: int | None = Field(default=None, ge=1, le=300)
+    next_session: str | None = Field(default=None, max_length=60)
+    next_session_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
 class AgentRequest(BaseModel):
     """Input passed from the orchestrator to one domain agent."""
 
@@ -54,6 +68,7 @@ class AgentRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
     profile: UserProfile | None = None
     today: date | None = None
+    training_context: TrainingContext | None = None
 
     @field_validator("user_id", "message")
     @classmethod
