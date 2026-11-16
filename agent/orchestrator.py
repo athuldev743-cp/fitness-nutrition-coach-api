@@ -35,6 +35,7 @@ _FITNESS = re.compile(
 class OrchestrationState(TypedDict, total=False):
     request: AgentRequest
     selected: list[str]
+    forced: str
     fitness_result: AgentResult | None
     nutrition_result: AgentResult | None
     results: list[AgentResult]
@@ -86,10 +87,17 @@ class MultiAgentOrchestrator:
         graph.add_edge("aggregate", END)
         self.graph = graph.compile()
 
-    def invoke(self, request: AgentRequest) -> AgentResult:
-        return self.graph.invoke({"request": request})["final"]
+    def invoke(self, request: AgentRequest, force: AgentName | None = None) -> AgentResult:
+        """Run the graph. `force` pins one agent and skips keyword routing."""
+        state: dict = {"request": request}
+        if force is not None:
+            state["forced"] = force.value
+        return self.graph.invoke(state)["final"]
 
     def _classify(self, state: OrchestrationState) -> dict:
+        forced = state.get("forced")
+        if forced:
+            return {"selected": [forced]}
         selected = [item.value for item in classify_request(state["request"].message)]
         return {"selected": selected}
 

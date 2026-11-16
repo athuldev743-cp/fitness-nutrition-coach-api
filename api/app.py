@@ -38,6 +38,7 @@ class ChatIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(min_length=1, max_length=1000)
     today: date | None = None
+    agent: str | None = Field(default=None, pattern="^(fitness|nutrition)$")
 
 
 class SyncIn(BaseModel):
@@ -155,7 +156,7 @@ def sync_up(body: SyncIn, user: str = Depends(current_user)):
         close(s)
 
 
-def run_chat(user, text, today=None):
+def run_chat(user, text, today=None, agent=None):
     """Run the authenticated request through the LangGraph domain orchestrator."""
     started = time.perf_counter()
     from agent.contracts import AgentName, AgentRequest, AgentStatus
@@ -184,7 +185,7 @@ def run_chat(user, text, today=None):
             profile=profile,
             today=today or date.today(),
         )
-        result = graph.invoke(request)
+        result = graph.invoke(request, force=AgentName(agent) if agent else None)
         fitness_meta = result.metadata.get("fitness", result.metadata)
         legacy_status = fitness_meta.get("legacy_status")
         is_mixed = "fitness" in result.metadata and "nutrition" in result.metadata
@@ -258,7 +259,7 @@ def run_chat(user, text, today=None):
 
 @app.post("/v1/chat")
 def chat(body: ChatIn, user: str = Depends(current_user)):
-    return run_chat(user, body.message, _client_today(body.today))
+    return run_chat(user, body.message, _client_today(body.today), body.agent)
 
 
 _SENT = re.compile(r"(?<=[.!?])\s+")
@@ -270,7 +271,7 @@ def sse(event, data):
 
 @app.post("/v1/chat/stream")
 def chat_stream(body: ChatIn, user: str = Depends(current_user)):
-    result = run_chat(user, body.message, _client_today(body.today))
+    result = run_chat(user, body.message, _client_today(body.today), body.agent)
 
     def gen():
         # safety / scope / plans / tools are deterministic and already validated: one complete event.
