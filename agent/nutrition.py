@@ -181,6 +181,7 @@ class NutritionAgent:
                 messages = [
                     {"role": "system", "content": (
                         SYSTEM_PROMPT
+                        + ("\n\nFACTS:" if request.profile is not None else "")
                         + "\n\nUSER PROFILE (saved, user-provided data):\n"
                         + profile_context
                         + "\n\nRETRIEVED EVIDENCE:\n"
