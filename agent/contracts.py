@@ -98,7 +98,7 @@ class TrainingContext(BaseModel):
     today_session: str | None = Field(default=None, max_length=60)
     today_minutes: int | None = Field(default=None, ge=1, le=300)
     next_session: str | None = Field(default=None, max_length=60)
-    next_session_date: str | None = Field(default=None, pattern=r"^\\d{4}-\\d{2}-\\d{2}$")
+    next_session_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class AgentRequest(BaseModel):
