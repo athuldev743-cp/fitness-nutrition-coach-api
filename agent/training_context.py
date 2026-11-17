@@ -45,12 +45,14 @@ def _workout_weeks(program) -> list[dict]:
                 rep_min = getattr(exercise, "rep_min", None)
                 rep_max = getattr(exercise, "rep_max", None)
                 rest_seconds = getattr(exercise, "rest_seconds", None)
+                unit = getattr(exercise, "unit", "reps")
                 if (
                     not isinstance(name, str) or not name.strip()
                     or not isinstance(sets, int) or not 1 <= sets <= 20
                     or not isinstance(rep_min, int) or not 1 <= rep_min <= 300
                     or not isinstance(rep_max, int) or not rep_min <= rep_max <= 300
                     or not isinstance(rest_seconds, int) or not 0 <= rest_seconds <= 900
+                    or unit not in {"reps", "seconds"}
                 ):
                     continue
                 exercises.append({
@@ -58,7 +60,7 @@ def _workout_weeks(program) -> list[dict]:
                     "sets": sets,
                     "rep_min": rep_min,
                     "rep_max": rep_max,
-                    "unit": str(getattr(exercise, "unit", "reps"))[:12],
+                    "unit": unit,
                     "rest_seconds": rest_seconds,
                 })
 
