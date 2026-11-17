@@ -13,10 +13,29 @@ TODAY = date(2026, 11, 16)
 
 
 def make_program():
-    lower = SimpleNamespace(day_number=1, session_number=1, label="Lower body", est_minutes=52.4)
-    upper = SimpleNamespace(day_number=2, session_number=1, label="Upper body", est_minutes=48.0)
-    return SimpleNamespace(days_per_week=4, split="upper_lower",
-                           weeks=[SimpleNamespace(number=1, sessions=[lower, upper])])
+    squat = SimpleNamespace(
+        name="Barbell squat", sets=3, rep_min=8, rep_max=12,
+        unit="reps", rest_seconds=90,
+    )
+    row_exercise = SimpleNamespace(
+        name="Dumbbell row", sets=3, rep_min=10, rep_max=12,
+        unit="reps", rest_seconds=75,
+    )
+    lower = SimpleNamespace(
+        day_number=1, session_number=1, weekday="Monday", label="Lower body",
+        est_minutes=52.4, muscles=["quads", "glutes"], exercises=[squat], goal="strength",
+    )
+    upper = SimpleNamespace(
+        day_number=2, session_number=1, weekday="Wednesday", label="Upper body",
+        est_minutes=48.0, muscles=["back", "chest"], exercises=[row_exercise], goal="muscle",
+    )
+    week = SimpleNamespace(
+        number=1, phase="foundation", effort="RPE 6-7", sessions=[lower, upper],
+    )
+    return SimpleNamespace(
+        level="beginner", goal="muscle", days_per_week=4, split="upper_lower",
+        weeks=[week],
+    )
 
 
 def row(day, planned_date, status):
@@ -83,7 +102,8 @@ def test_a_failing_store_never_breaks_the_request():
 def test_context_carries_only_the_whitelisted_fields():
     ctx = build_training_context(FakePrograms([row(1, "2026-11-16", "planned")]), TODAY)
     assert set(ctx.model_dump()) == {
-        "sessions_per_week", "today", "today_session", "today_minutes", "next_session", "next_session_date",
+        "program_goal", "program_level", "split", "sessions_per_week", "training_weeks",
+        "today", "today_session", "today_minutes", "next_session", "next_session_date",
     }
 
 
@@ -117,6 +137,8 @@ def test_prompt_with_training_context_has_a_labelled_section_and_the_personal_ma
     assert "TRAINING CONTEXT" in prompt
     assert "Lower body" in prompt
     assert "must never be cited" in prompt
+    assert "actively use this context" in prompt
+    assert "training volume alone" in prompt
     assert "FACTS:" in prompt
 
 
@@ -125,6 +147,41 @@ def test_prompt_without_training_context_is_unchanged():
     assert result.status is AgentStatus.OK
     assert "TRAINING CONTEXT" not in prompt
     assert "FACTS:" not in prompt
+
+
+def test_context_includes_saved_programme_and_exercise_prescriptions():
+    ctx = build_training_context(
+        FakePrograms([row(1, "2026-11-16", "planned")]), TODAY,
+    )
+
+    assert ctx.program_goal == "muscle"
+    assert ctx.program_level == "beginner"
+    assert ctx.split == "upper_lower"
+    assert ctx.training_weeks[0].phase == "foundation"
+    assert ctx.training_weeks[0].effort == "RPE 6-7"
+    lower = ctx.training_weeks[0].sessions[0]
+    assert lower.muscles == ["quads", "glutes"]
+    assert lower.exercises[0].name == "Barbell squat"
+    assert lower.exercises[0].sets == 3
+    assert (lower.exercises[0].rep_min, lower.exercises[0].rep_max) == (8, 12)
+    assert lower.exercises[0].rest_seconds == 90
+
+
+def test_personalized_retrieval_query_includes_saved_workout_terms():
+    ctx = build_training_context(
+        FakePrograms([row(1, "2026-11-16", "planned")]), TODAY,
+    )
+    request = AgentRequest(
+        user_id="t", message="Create a diet plan", training_context=ctx,
+    )
+
+    query = NutritionAgent._build_retrieval_query(request)
+
+    assert "muscle" in query
+    assert "upper_lower" in query
+    assert "Lower body" in query
+    assert "quads" in query
+    assert "Barbell squat" in query
 
 
 class FakeProfileStore:
