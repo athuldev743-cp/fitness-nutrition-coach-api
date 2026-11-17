@@ -211,7 +211,7 @@ class NutritionAgent:
                     })
                 completion = self.llm.create_chat_completion(
                     messages=messages,
-                    max_tokens=350,
+                    max_tokens=1000,
                     temperature=0.1,
                 )
                 served_by.append(dict(getattr(self.llm, "last", None) or {}))

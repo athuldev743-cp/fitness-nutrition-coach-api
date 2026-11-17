@@ -145,7 +145,7 @@ class HybridLLM:
 
         requested_tokens = kw.get("max_tokens")
         # Preserve the historical default budget, but honor explicit caller budgets.
-        max_tokens = 640 if requested_tokens is None else min(800, max(1, int(requested_tokens)))
+        max_tokens = 640 if requested_tokens is None else min(1200, max(1, int(requested_tokens)))
 
         for config in MODEL_REGISTRY:
             model_name = config["name"]
