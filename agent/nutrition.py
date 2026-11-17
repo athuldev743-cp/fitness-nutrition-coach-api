@@ -275,28 +275,46 @@ class NutritionAgent:
 
     @staticmethod
     def _build_retrieval_query(request: AgentRequest) -> str:
-        """Add only relevant, explicitly saved profile context to personalized searches."""
+        """Add saved profile and workout terms to personalized nutrition searches."""
         query = request.message.strip()
-        profile = request.profile
-        if profile is None or not _PERSONALIZED_REQUEST.search(query):
+        if not _PERSONALIZED_REQUEST.search(query):
             return query
 
-        profile_terms = [
-            profile.goal,
-            profile.activity_level,
-            profile.dietary_pattern,
-            *profile.preferred_foods,
-            *profile.excluded_foods,
-            *profile.allergies,
-            *profile.intolerances,
-        ]
-        profile_terms = [
-            value for value in profile_terms
-            if value and value != "unspecified"
-        ]
-        if profile_terms:
-            query += "\nRelevant saved profile context: " + ", ".join(profile_terms)
-        return query
+        context_terms: list[str] = []
+        profile = request.profile
+        if profile is not None:
+            context_terms.extend([
+                profile.goal,
+                profile.activity_level,
+                profile.dietary_pattern,
+                *profile.preferred_foods,
+                *profile.excluded_foods,
+                *profile.allergies,
+                *profile.intolerances,
+            ])
+
+        training = request.training_context
+        if training is not None:
+            context_terms.extend([
+                training.program_goal,
+                training.program_level,
+                training.split,
+                f"{training.sessions_per_week} training sessions per week"
+                if training.sessions_per_week else None,
+            ])
+            for week in training.training_weeks:
+                for session in week.sessions:
+                    context_terms.extend([session.label, *session.muscles])
+                    context_terms.extend(exercise.name for exercise in session.exercises)
+
+        unique_terms = list(dict.fromkeys(
+            value.strip()
+            for value in context_terms
+            if isinstance(value, str) and value.strip() and value != "unspecified"
+        ))
+        if unique_terms:
+            query += "\nRelevant saved profile and workout context: " + ", ".join(unique_terms[:40])
+        return query[:2000]
 
     @staticmethod
     def _format_profile(profile: UserProfile | None) -> str:
@@ -327,11 +345,19 @@ class NutritionAgent:
         if context is None:
             return ""
         return (
-            "\n\nTRAINING CONTEXT (from the user's saved workout plan; it is not evidence and "
-            "must never be cited):\n"
+            "\n\nTRAINING CONTEXT (structured facts from the user's saved workout programme; "
+            "this is user context, not scientific evidence, and must never be cited):\n"
             + json.dumps(context.model_dump(exclude_none=True), ensure_ascii=False)
-            + "\nUse it only to tailor timing and practical tips, such as food around a planned "
-            "session. Do not derive calorie, macro or supplement numbers from it."
+            + "\nWhen creating a personalized diet or meal plan, actively use this context. "
+            "Consider the programme goal, level, split, weekly frequency, training and rest days, "
+            "session duration, target muscle groups, exercises, prescribed sets/reps/rest, phase "
+            "and effort when tailoring meal distribution and general recovery nutrition. "
+            "Treat planned sessions as planned, not completed; use today's status to distinguish "
+            "a planned session, a completed session and a rest day. This workout context is not "
+            "nutrition research and must not be cited as evidence. Do not calculate or invent "
+            "calorie, macro or supplement targets from exercise names or training volume alone. "
+            "Any numeric nutrition target must also be supported by relevant saved profile inputs "
+            "and the retrieved nutrition evidence; otherwise explain what is missing."
         )
 
     def _result(

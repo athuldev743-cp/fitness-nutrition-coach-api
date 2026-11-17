@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from state.profile import UserProfile
 
@@ -45,12 +45,67 @@ class EvidenceReference(BaseModel):
         return value
 
 
+class WorkoutExerciseContext(BaseModel):
+    """A bounded, whitelisted exercise prescription from a saved programme."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: str = Field(min_length=1, max_length=120)
+    sets: int = Field(ge=1, le=20)
+    rep_min: int = Field(ge=1, le=300)
+    rep_max: int = Field(ge=1, le=300)
+    aim_low: int | None = Field(default=None, ge=1, le=300)
+    aim_high: int | None = Field(default=None, ge=1, le=300)
+    unit: Literal["reps", "seconds"] = "reps"
+    rest_seconds: int = Field(ge=0, le=900)
+
+    @model_validator(mode="after")
+    def _validate_rep_range(self):
+        if self.rep_max < self.rep_min:
+            raise ValueError("rep_max must be greater than or equal to rep_min")
+        if (self.aim_low is None) != (self.aim_high is None):
+            raise ValueError("aim_low and aim_high must be supplied together")
+        if self.aim_low is not None and self.aim_high < self.aim_low:
+            raise ValueError("aim_high must be greater than or equal to aim_low")
+        return self
+
+
+class WorkoutSessionContext(BaseModel):
+    """A single scheduled session, including its exercise prescriptions."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    day_number: int = Field(ge=1, le=7)
+    session_number: int = Field(default=1, ge=1, le=3)
+    weekday: str = Field(min_length=1, max_length=12)
+    label: str = Field(min_length=1, max_length=60)
+    muscles: list[str] = Field(default_factory=list, max_length=12)
+    estimated_minutes: float = Field(gt=0, le=300)
+    goal: str | None = Field(default=None, max_length=60)
+    exercises: list[WorkoutExerciseContext] = Field(default_factory=list, max_length=8)
+
+
+class WorkoutWeekContext(BaseModel):
+    """One programme week, including its phase and scheduled sessions."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    number: int = Field(ge=1, le=4)
+    phase: str = Field(min_length=1, max_length=30)
+    effort: str = Field(min_length=1, max_length=100)
+    sessions: list[WorkoutSessionContext] = Field(default_factory=list, max_length=7)
+
+
 class TrainingContext(BaseModel):
     """Whitelisted facts from the user's saved workout plan, built by code and never by a model."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    program_goal: str | None = Field(default=None, max_length=60)
+    program_level: str | None = Field(default=None, max_length=20)
+    split: str | None = Field(default=None, max_length=30)
     sessions_per_week: int | None = Field(default=None, ge=1, le=7)
+    training_weeks: list[WorkoutWeekContext] = Field(default_factory=list, max_length=4)
     today: Literal["training_day_planned", "training_day_done", "rest_day"]
     today_session: str | None = Field(default=None, max_length=60)
     today_minutes: int | None = Field(default=None, ge=1, le=300)
