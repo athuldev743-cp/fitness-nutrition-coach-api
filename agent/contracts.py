@@ -54,6 +54,8 @@ class WorkoutExerciseContext(BaseModel):
     sets: int = Field(ge=1, le=20)
     rep_min: int = Field(ge=1, le=300)
     rep_max: int = Field(ge=1, le=300)
+    aim_low: int | None = Field(default=None, ge=1, le=300)
+    aim_high: int | None = Field(default=None, ge=1, le=300)
     unit: Literal["reps", "seconds"] = "reps"
     rest_seconds: int = Field(ge=0, le=900)
 
@@ -61,6 +63,10 @@ class WorkoutExerciseContext(BaseModel):
     def _validate_rep_range(self):
         if self.rep_max < self.rep_min:
             raise ValueError("rep_max must be greater than or equal to rep_min")
+        if (self.aim_low is None) != (self.aim_high is None):
+            raise ValueError("aim_low and aim_high must be supplied together")
+        if self.aim_low is not None and self.aim_high < self.aim_low:
+            raise ValueError("aim_high must be greater than or equal to aim_low")
         return self
 
 
