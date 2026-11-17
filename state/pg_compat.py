@@ -4,7 +4,7 @@ import os
 import re
 from datetime import datetime
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 class Row(tuple):
@@ -30,7 +30,7 @@ def _row_factory(cursor):
 
 DDL = [
     """CREATE TABLE user_profile (user_id TEXT PRIMARY KEY, name TEXT NOT NULL, age INTEGER, height_cm DOUBLE PRECISION,
-       weight_kg DOUBLE PRECISION, goal TEXT NOT NULL, experience TEXT NOT NULL, equipment TEXT, session_minutes INTEGER NOT NULL,
+       weight_kg DOUBLE PRECISION, sex TEXT NOT NULL DEFAULT 'unspecified', waist_cm DOUBLE PRECISION, neck_cm DOUBLE PRECISION, hip_cm DOUBLE PRECISION, goal TEXT NOT NULL, experience TEXT NOT NULL, equipment TEXT, session_minutes INTEGER NOT NULL,
        limitations TEXT, screening TEXT NOT NULL DEFAULT 'not_asked',
        activity_level TEXT NOT NULL DEFAULT 'unspecified',
        dietary_pattern TEXT NOT NULL DEFAULT 'unspecified',
@@ -191,6 +191,13 @@ def _open_schema():
             raw.execute("ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS daily_food_budget_inr INTEGER")
             raw.execute("INSERT INTO schema_migrations (version, applied_at) VALUES (%s, %s)", (10, datetime.now().isoformat(timespec="seconds")))
             version = 10
+        if version < 11:
+            raw.execute("ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS sex TEXT NOT NULL DEFAULT 'unspecified'")
+            raw.execute("ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS waist_cm DOUBLE PRECISION")
+            raw.execute("ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS neck_cm DOUBLE PRECISION")
+            raw.execute("ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS hip_cm DOUBLE PRECISION")
+            raw.execute("INSERT INTO schema_migrations (version, applied_at) VALUES (%s, %s)", (11, datetime.now().isoformat(timespec="seconds")))
+            version = 11
         raw.execute("SELECT pg_advisory_unlock(727)")
         if version != SCHEMA_VERSION:
             raise RuntimeError(f"database schema version {version} does not match code version {SCHEMA_VERSION}")
