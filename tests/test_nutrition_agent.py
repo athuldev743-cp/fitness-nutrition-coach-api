@@ -268,3 +268,50 @@ def test_personalized_retrieval_includes_allergy_and_intolerance_context():
     assert result.status is AgentStatus.OK
     assert "peanut" in calls[0]
     assert "lactose" in calls[0]
+
+
+def test_training_context_is_compacted_and_bounded():
+    class LargeTrainingContext:
+        def model_dump(self, exclude_none=True):
+            return {
+                "program_goal": "hypertrophy",
+                "program_level": "intermediate",
+                "split": "upper_lower",
+                "sessions_per_week": 6,
+                "today": "training_day_planned",
+                "training_weeks": [{
+                    "number": 1,
+                    "phase": "accumulation",
+                    "effort": "moderate",
+                    "sessions": [{
+                        "day_number": 1,
+                        "session_number": 1,
+                        "weekday": "Monday",
+                        "label": "Upper body",
+                        "muscles": ["chest", "back", "shoulders"],
+                        "estimated_minutes": 75,
+                        "goal": "hypertrophy",
+                        "exercises": [
+                            {
+                                "name": f"Exercise {i}",
+                                "sets": 4,
+                                "rep_min": 8,
+                                "rep_max": 12,
+                                "unit": "reps",
+                                "rest_seconds": 90,
+                                "aim_low": 8,
+                                "aim_high": 12,
+                            }
+                            for i in range(8)
+                        ],
+                    }]
+                }],
+            }
+
+    formatted = NutritionAgent._format_training(LargeTrainingContext())
+
+    assert len(formatted) < 5000
+    assert "hypertrophy" in formatted
+    assert "Exercise 0" in formatted
+    assert "Exercise 7" not in formatted
+    assert "not scientific evidence" in formatted
