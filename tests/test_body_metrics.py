@@ -10,7 +10,7 @@ def test_bmi_and_mifflin_st_jeor_are_calculated_from_profile():
     profile = UserProfile(name="Test", age=30, sex="male", height_cm=180, weight_kg=80)
     result = calculate_body_metrics(profile)
     assert result["bmi"] == 24.7
-    assert result["bmr_kcal_per_day"] == 1755
+    assert result["bmr_kcal_per_day"] == 1780
     assert result["estimated_body_fat_percent"] is None
 
 
