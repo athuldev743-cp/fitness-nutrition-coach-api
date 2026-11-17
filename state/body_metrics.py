@@ -38,6 +38,19 @@ def calculate_body_metrics(profile: UserProfile) -> dict:
     fat_mass = round(weight * body_fat / 100, 1) if weight and body_fat is not None else None
     lean_mass = round(weight - fat_mass, 1) if weight and fat_mass is not None else None
 
+    required = ["sex", "height_cm", "waist_cm", "neck_cm"]
+    missing = []
+    if profile.sex == "unspecified":
+        missing.append("sex")
+    if height is None:
+        missing.append("height_cm")
+    if profile.waist_cm is None:
+        missing.append("waist_cm")
+    if profile.neck_cm is None:
+        missing.append("neck_cm")
+    if profile.sex == "female" and profile.hip_cm is None:
+        missing.append("hip_cm")
+
     return {
         "bmi": bmi,
         "bmr_kcal_per_day": bmr,
@@ -45,10 +58,6 @@ def calculate_body_metrics(profile: UserProfile) -> dict:
         "body_fat_method": method,
         "estimated_fat_mass_kg": fat_mass,
         "estimated_lean_mass_kg": lean_mass,
-        "missing_body_fat_inputs": (
-            [] if body_fat is not None else
-            ["sex", "height_cm", "waist_cm", "neck_cm"] +
-            (["hip_cm"] if profile.sex == "female" else [])
-        ),
+        "missing_body_fat_inputs": missing if body_fat is None else [],
         "disclaimer": "Estimates only. Circumference-based body-fat results can differ from DEXA and depend on accurate measurement technique.",
     }
