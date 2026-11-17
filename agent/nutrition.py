@@ -304,8 +304,12 @@ class NutritionAgent:
             return "No saved profile is available. Do not assume personal details."
         profile_data = {
             "age": profile.age,
+            "sex": profile.sex,
             "height_cm": profile.height_cm,
             "weight_kg": profile.weight_kg,
+            "waist_cm": profile.waist_cm,
+            "neck_cm": profile.neck_cm,
+            "hip_cm": profile.hip_cm,
             "goal": profile.goal,
             "activity_level": profile.activity_level,
             "dietary_pattern": profile.dietary_pattern,
