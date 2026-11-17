@@ -1,6 +1,6 @@
 # Training Agent API
 
-A fitness and nutrition coaching system. A LangGraph orchestrator routes each chat message to a workout agent, a citation-enforcing nutrition RAG agent, or both. A multi-provider LLM fallback chain generates the answers. The repository also contains the evaluation harness used to measure each part, including its known limitations.
+A fitness and nutrition coaching backend. A LangGraph orchestrator routes each chat message to a workout agent, a citation-enforcing nutrition RAG agent, or both. A multi-provider LLM fallback chain generates the answers. The repository also contains the evaluation harness used to measure each part, including its known limitations.
 
 - **Stack:** Python 3.10–3.13, FastAPI, LangGraph, PostgreSQL + pgvector (Neon), fastembed
 - **Live API:** https://training-agent-api.fastapicloud.dev (health: `/health`, readiness: `/ready`)
@@ -52,6 +52,7 @@ flowchart TD
 ```
 
 - **Routing is deterministic.** `classify_request` matches fitness and nutrition keyword patterns. A message that matches both runs the fitness agent first and then the nutrition agent, in sequence. A message that matches neither gets a clarification question.
+- **Pinning an agent.** `invoke(request, force=...)` sets the selection before the graph runs, so the classify step is skipped. The rest of the graph, including aggregation, is unchanged.
 - **Contracts** (`agent/contracts.py`):
   - `AgentRequest`: `request_id`, `user_id`, `message` (max 1000 characters), optional `profile`, optional `today`.
   - `AgentResult`: `agent`, `status`, `message` (max 4000 characters), up to 20 `EvidenceReference` items, and a `metadata` dict.
@@ -80,6 +81,8 @@ MCP and A2A are not implemented. The design documents in `docs/architecture/` de
 4. If validation fails, retry once with a corrective instruction.
 5. A short, number-free reply saying the sources are insufficient returns status `refused` (`insufficient_evidence`). Two failed attempts return `unavailable` with a fixed message. An uncited answer is never returned.
 
+The request can also carry a small `TrainingContext`: sessions per week, whether today is a training day, and today's and the next session. Plain code builds it from the saved plan, and only when the nutrition agent will run. It appears in the prompt as a labelled section that must not be cited, and no text written by the fitness agent is passed along.
+
 Each result carries `citation_validation`, `citation_attempts`, `citation_sources` and `served_by` (the provider and model that answered each attempt).
 
 ## LLM fallback chain
@@ -94,8 +97,8 @@ Each result carries `citation_validation`, `citation_attempts`, `citation_source
 
 - **Cooldowns:** 429 puts a model on a 60 s cooldown and 5xx on 45 s. 401/403 puts the whole provider on 300 s. Other errors such as timeouts use 300 s. A truncated, empty or invalid-JSON reply moves to the next model without a cooldown.
 - **Limits:** a 30 s overall deadline, per-call timeouts (default 8 s, capped by each model's configured timeout), and a 400–800 token reply budget.
-- **Privacy:** health-limitation text is redacted before cloud calls unless `CLOUD_SHARE_LIMITATIONS=1`. Replies are cached for 6 hours (up to 500 entries), but never for prompts that carry profile facts.
-- **Modes:** `LLM_MODE=cloud` (default) uses `CloudOnlyLLM`, which raises `LLMUnavailable` when every model fails. `LLM_MODE=local` uses `HybridLLM` with a local model. In hybrid mode, streaming, structured and profile-bearing requests stay local.
+- **Privacy:** health-limitation text is redacted before cloud calls unless `CLOUD_SHARE_LIMITATIONS=1`. Replies are cached for 6 hours (up to 500 entries), except for prompts containing a `FACTS:` block, the marker the LLM layer treats as profile data.
+- **Modes:** `LLM_MODE=cloud` (default) uses `CloudOnlyLLM`, which raises `LLMUnavailable` when every model fails. `LLM_MODE=local` uses `HybridLLM` with a local model. In hybrid mode, streaming, structured and `FACTS:`-marked requests stay local.
 
 ## API surface
 
@@ -115,7 +118,11 @@ The app defines 35 routes in `api/app.py`. Interactive docs are available at `/d
 
 Three internal evaluation routes (`/internal/evaluation/...`) are hidden from the schema and disabled unless `EVALUATION_API_KEY` is configured. Callers send it in the `X-Evaluation-Key` header.
 
+`POST /v1/chat` and `POST /v1/chat/stream` accept an optional `agent` field (`fitness` or `nutrition`) that skips keyword routing and pins that agent. Any other value is rejected with 422.
+
 `POST /v1/chat/stream` runs the full chat request first and then streams the finished reply.
+
+`PUT /v1/profile` keeps any profile field the client does not send, so a client that does not know about the nutrition preferences cannot reset them.
 
 ## Repository layout
 
@@ -185,7 +192,7 @@ On this dataset, naive RRF fusion underperformed vector-only, and the reranker r
 
 ### Live nutrition answers (deployed API)
 
-42 synthetic queries against the deployed API. "Citation-valid" means the answer contained valid in-scope citation labels. It does not mean the cited sources support the claims.
+42 synthetic queries against the deployed API, sent through the internal evaluation route, which calls the nutrition agent directly. Keyword routing through `/v1/chat` is therefore not part of these numbers (see Known limitations). "Citation-valid" means the answer contained valid in-scope citation labels. It does not mean the cited sources support the claims.
 
 | Run | Request pacing | State | Citation-valid |
 |---|---|---|---|
@@ -221,8 +228,8 @@ Use a new `--output` for each run. `--resume` continues from a checkpoint, but i
 python -m pytest -q
 ```
 
-- 169 tests pass locally with `tests/test_nutrition_benchmark.py` excluded. That module failed to import in my local environment (`scripts.benchmark_nutrition_retrieval` was not found), so check it in yours.
-- Line coverage was 46% overall across `agent`, `api`, `engine`, `rag`, `services` and `state`. It was 97–99% on the orchestrator and nutrition agent.
+- 195 tests pass locally with `tests/test_nutrition_benchmark.py` excluded. That module failed to import in my local environment (`scripts.benchmark_nutrition_retrieval` was not found), so check it in yours.
+- When last measured (at 169 tests), line coverage was 46% overall across `agent`, `api`, `engine`, `rag`, `services` and `state`. It was 97–99% on the orchestrator and nutrition agent.
 - GitHub Actions (`.github/workflows/python-ci.yml`) runs on Python 3.10–3.13: compile check, import check for the app and reranker service, tests with coverage, and artifact uploads for the nutrition ingestion, retrieval-contract and orchestration reports.
 
 ## Known limitations
@@ -231,6 +238,8 @@ python -m pytest -q
 - **Live results vary between runs** (16/42 to 39/42 so far), mainly with free-tier provider availability and pacing. Why qwen answered only 27 of 42 cases in the last run has not been root-caused.
 - **The reranker in production is unconfirmed.** The retrieval numbers above come from a local reranker. A separate run with no reranking available fell back to RRF for all 42 queries.
 - **Routing is keyword-based.** It missed 5 of 40 held-out queries. Mixed queries run the two agents in sequence, not in parallel.
+- **Nutrition questions without a known keyword are not routed to the nutrition agent.** Of the 42 nutrition evaluation queries, `/v1/chat` routes 27 to the nutrition agent only, 5 to both agents and 10 to neither (for example "potassium intake recommendations" or "iron requirement for women" get a clarification prompt). The live nutrition evaluation bypasses this step. Clients can avoid the gap with the optional `agent` field on `/v1/chat`.
 - **Mixed-agent status:** when one agent returns `refused` or `error` and the other `ok`, the combined status becomes `needs_clarification`.
 - **Coverage is uneven:** several engine modules had no test coverage in the measured run.
+- **Saved nutrition preferences are sent to the cloud LLM providers.** Dietary pattern, excluded foods, allergies and the other saved nutrition fields are part of the nutrition prompt and are not redacted. Such prompts carry the `FACTS:` marker, so they are never cached and, in hybrid mode, stay on the local model.
 - **MCP and A2A are design notes, not features.**
