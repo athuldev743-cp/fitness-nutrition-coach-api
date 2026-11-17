@@ -82,9 +82,12 @@ class UserProfile(BaseModel):
     def _validate_measurements(self):
         if self.waist_cm is not None and self.neck_cm is not None and self.waist_cm <= self.neck_cm:
             raise ValueError("waist_cm must be greater than neck_cm")
-        if self.sex == "female" and self.waist_cm is not None and self.hip_cm is not None:
-            if self.waist_cm + self.hip_cm <= self.neck_cm if self.neck_cm is not None else False:
-                raise ValueError("waist_cm + hip_cm must be greater than neck_cm")
+        if (
+            self.sex == "female" and self.waist_cm is not None
+            and self.hip_cm is not None and self.neck_cm is not None
+            and self.waist_cm + self.hip_cm <= self.neck_cm
+        ):
+            raise ValueError("waist_cm + hip_cm must be greater than neck_cm")
         return self
 
 
