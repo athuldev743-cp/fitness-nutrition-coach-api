@@ -50,7 +50,8 @@ def _is_insufficient_evidence(answer: str) -> bool:
 
 
 MAX_EVIDENCE = 5
-MAX_CONTEXT_CHARS = 9000
+MAX_CONTEXT_CHARS = 6000
+MAX_TRAINING_CONTEXT_CHARS = 3500
 MAX_CITATION_ATTEMPTS = 2
 
 SYSTEM_PROMPT = """You are the nutrition information agent in a fitness coaching application.
@@ -368,20 +369,58 @@ class NutritionAgent:
     def _format_training(context) -> str:
         if context is None:
             return ""
+
+        data = context.model_dump(exclude_none=True)
+        # Keep nutrition-relevant programme facts without sending every exercise prescription.
+        compact_weeks = []
+        for week in data.get("training_weeks", [])[:4]:
+            compact_sessions = []
+            for session in week.get("sessions", [])[:7]:
+                compact_sessions.append({
+                    "day_number": session.get("day_number"),
+                    "session_number": session.get("session_number"),
+                    "weekday": session.get("weekday"),
+                    "label": session.get("label"),
+                    "muscles": session.get("muscles", [])[:8],
+                    "estimated_minutes": session.get("estimated_minutes"),
+                    "goal": session.get("goal"),
+                    "exercises": [
+                        {
+                            "name": exercise.get("name"),
+                            "sets": exercise.get("sets"),
+                            "rep_min": exercise.get("rep_min"),
+                            "rep_max": exercise.get("rep_max"),
+                            "unit": exercise.get("unit"),
+                        }
+                        for exercise in session.get("exercises", [])[:3]
+                    ],
+                })
+            compact_weeks.append({
+                "number": week.get("number"),
+                "phase": week.get("phase"),
+                "effort": week.get("effort"),
+                "sessions": compact_sessions,
+            })
+
+        compact = {key: value for key, value in data.items() if key != "training_weeks"}
+        compact["training_weeks"] = compact_weeks
+        serialized = json.dumps(compact, ensure_ascii=False)
+        if len(serialized) > MAX_TRAINING_CONTEXT_CHARS:
+            serialized = serialized[:MAX_TRAINING_CONTEXT_CHARS] + " [training context shortened]"
+
         return (
             "\n\nTRAINING CONTEXT (structured facts from the user's saved workout programme; "
             "this is user context, not scientific evidence, and must never be cited):\n"
-            + json.dumps(context.model_dump(exclude_none=True), ensure_ascii=False)
+            + serialized
             + "\nWhen creating a personalized diet or meal plan, actively use this context. "
-            "Consider the programme goal, level, split, weekly frequency, training and rest days, "
-            "session duration, target muscle groups, exercises, prescribed sets/reps/rest, phase "
-            "and effort when tailoring meal distribution and general recovery nutrition. "
-            "Treat planned sessions as planned, not completed; use today's status to distinguish "
-            "a planned session, a completed session and a rest day. This workout context is not "
-            "nutrition research and must not be cited as evidence. Do not calculate or invent "
-            "calorie, macro or supplement targets from exercise names or training volume alone. "
-            "Any numeric nutrition target must also be supported by relevant saved profile inputs "
-            "and the retrieved nutrition evidence; otherwise explain what is missing."
+            + "Consider the programme goal, level, split, weekly frequency, training and rest days, "
+            + "session duration, target muscle groups, exercises, phase and effort when tailoring "
+            + "meal distribution and general recovery nutrition. Treat planned sessions as planned, "
+            "not completed; use today's status to distinguish a planned session, a completed session "
+            "and a rest day. This workout context is not nutrition research and must not be cited as "
+            "evidence. Do not calculate or invent calorie, macro or supplement targets from exercise "
+            "names or training volume alone. Any numeric nutrition target must also be supported by "
+            "relevant saved profile inputs and retrieved nutrition evidence; otherwise explain what is missing."
         )
 
     def _result(
