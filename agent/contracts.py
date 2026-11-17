@@ -124,6 +124,7 @@ class AgentRequest(BaseModel):
     profile: UserProfile | None = None
     today: date | None = None
     training_context: TrainingContext | None = None
+    fitness_context: str | None = Field(default=None, max_length=2000)
 
     @field_validator("user_id", "message")
     @classmethod

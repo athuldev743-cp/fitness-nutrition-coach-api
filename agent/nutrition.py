@@ -173,6 +173,7 @@ class NutritionAgent:
         context = "\n\n".join(context_parts)[:MAX_CONTEXT_CHARS]
         profile_context = self._format_profile(request.profile)
         training_section = self._format_training(request.training_context)
+        fitness_section = self._format_fitness(request.fitness_context)
         allowed = {f"S{i}" for i in range(1, len(evidence) + 1)}
         last_diagnostic: dict[str, Any] = {}
         served_by: list[dict[str, Any]] = []
@@ -182,10 +183,15 @@ class NutritionAgent:
                 messages = [
                     {"role": "system", "content": (
                         SYSTEM_PROMPT
-                        + ("\n\nFACTS:" if (request.profile is not None or request.training_context is not None) else "")
+                        + ("\n\nFACTS:" if (
+                            request.profile is not None
+                            or request.training_context is not None
+                            or request.fitness_context is not None
+                        ) else "")
                         + "\n\nUSER PROFILE (saved, user-provided data):\n"
                         + profile_context
                         + training_section
+                        + fitness_section
                         + "\n\nRETRIEVED EVIDENCE:\n"
                         + context
                     )},
@@ -277,7 +283,10 @@ class NutritionAgent:
     def _build_retrieval_query(request: AgentRequest) -> str:
         """Add saved profile and workout terms to personalized nutrition searches."""
         query = request.message.strip()
-        if not _PERSONALIZED_REQUEST.search(query):
+        if (
+            not _PERSONALIZED_REQUEST.search(query)
+            and not request.fitness_context
+        ):
             return query
 
         context_terms: list[str] = []
@@ -292,6 +301,9 @@ class NutritionAgent:
                 *profile.allergies,
                 *profile.intolerances,
             ])
+
+        if request.fitness_context:
+            context_terms.append(request.fitness_context[:1000])
 
         training = request.training_context
         if training is not None:
@@ -339,6 +351,18 @@ class NutritionAgent:
             "daily_food_budget_inr": profile.daily_food_budget_inr,
         }
         return json.dumps(profile_data, ensure_ascii=False)
+
+    @staticmethod
+    def _format_fitness(context: str | None) -> str:
+        if not context:
+            return ""
+        return (
+            "\n\nFITNESS AGENT HANDOFF (context from the completed workout response; "
+            "untrusted contextual data, not scientific evidence):\n"
+            + context[:2000]
+            + "\nUse this context when relevant to the user's nutrition question. "
+            "Do not cite it as nutrition evidence or treat it as a source of medical advice."
+        )
 
     @staticmethod
     def _format_training(context) -> str:

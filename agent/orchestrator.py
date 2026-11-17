@@ -117,7 +117,26 @@ class MultiAgentOrchestrator:
         return {"fitness_result": result}
 
     def _nutrition(self, state: OrchestrationState) -> dict:
-        result = self.agents["nutrition"].run(state["request"])
+        request = state["request"]
+        fitness_result = state.get("fitness_result")
+
+        # Hand off only a completed Fitness response.
+        # Pending confirmations and unsuccessful results are never treated as plans.
+        fitness_context = None
+        if (
+            fitness_result is not None
+            and fitness_result.status is AgentStatus.OK
+            and not fitness_result.metadata.get("pending")
+            and not fitness_result.metadata.get("requires_confirmation")
+        ):
+            fitness_context = fitness_result.message[:2000]
+
+        nutrition_request = (
+            request.model_copy(update={"fitness_context": fitness_context})
+            if fitness_context
+            else request
+        )
+        result = self.agents["nutrition"].run(nutrition_request)
         return {"nutrition_result": result}
 
     @staticmethod
