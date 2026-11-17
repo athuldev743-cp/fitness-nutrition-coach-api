@@ -378,6 +378,20 @@ def put_profile(body: ProfileIn, user: str = Depends(current_user)):
         close(s)
 
 
+@app.get("/v1/profile/metrics")
+def get_profile_metrics(user: str = Depends(current_user)):
+    """Return deterministic estimates from saved profile inputs; missing inputs stay null."""
+    from state.body_metrics import calculate_body_metrics
+    s = stores(user)
+    try:
+        profile = s["profile"].get()
+        if profile is None:
+            raise HTTPException(404, "no profile")
+        return calculate_body_metrics(profile)
+    finally:
+        close(s)
+
+
 @app.get("/v1/account/export")
 def account_export(user: str = Depends(current_user)):
     s = stores(user)
