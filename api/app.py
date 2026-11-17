@@ -20,7 +20,11 @@ logger = logging.getLogger("training_agent.api")
 
 MAX_BODY = 2_000_000
 
-DB = Path(os.getenv("TRAINING_DB") or Path(__file__).resolve().parent.parent / "data" / "server.db")
+DB = (
+    ":memory:"
+    if os.getenv("STATE_BACKEND") == "postgres"
+    else Path(os.getenv("TRAINING_DB") or Path(__file__).resolve().parent.parent / "data" / "server.db")
+)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     try:
