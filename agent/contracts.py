@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from state.profile import UserProfile
 
@@ -54,8 +54,14 @@ class WorkoutExerciseContext(BaseModel):
     sets: int = Field(ge=1, le=20)
     rep_min: int = Field(ge=1, le=300)
     rep_max: int = Field(ge=1, le=300)
-    unit: str = Field(default="reps", max_length=12)
+    unit: Literal["reps", "seconds"] = "reps"
     rest_seconds: int = Field(ge=0, le=900)
+
+    @model_validator(mode="after")
+    def _validate_rep_range(self):
+        if self.rep_max < self.rep_min:
+            raise ValueError("rep_max must be greater than or equal to rep_min")
+        return self
 
 
 class WorkoutSessionContext(BaseModel):
