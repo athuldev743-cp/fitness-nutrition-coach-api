@@ -143,8 +143,9 @@ class HybridLLM:
         attempted = 0
         skipped = 0
 
-        requested_tokens = kw.get("max_tokens", 160)
-        max_tokens = min(800, max(400, 4 * requested_tokens))
+        requested_tokens = kw.get("max_tokens")
+        # Preserve the historical default budget, but honor explicit caller budgets.
+        max_tokens = 640 if requested_tokens is None else min(800, max(1, int(requested_tokens)))
 
         for config in MODEL_REGISTRY:
             model_name = config["name"]
@@ -210,11 +211,13 @@ class HybridLLM:
                 body["response_format"] = {"type": "json_object"}
 
             attempted += 1
+            payload_bytes = len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
             logger.info(
                 "Cloud LLM attempting provider=%s model=%s "
-                "timeout_s=%s remaining_s=%s",
+                "timeout_s=%s remaining_s=%s payload_bytes=%s max_tokens=%s",
                 provider, config["model"],
                 round(model_timeout, 2), round(remaining, 2),
+                payload_bytes, max_tokens,
             )
 
             try:
@@ -229,8 +232,10 @@ class HybridLLM:
                 if choice.get("finish_reason") == "length":
                     self._fail(model_name, "truncated", self.REJECTED_REPLY_COOLDOWN_S)
                     logger.warning(
-                        "Cloud LLM rejected provider=%s model=%s reason=truncated",
-                        provider, config["model"],
+                        "Cloud LLM rejected provider=%s model=%s reason=truncated "
+                        "finish_reason=%s usage=%s max_tokens=%s",
+                        provider, config["model"], choice.get("finish_reason"),
+                        data.get("usage") or {}, max_tokens,
                     )
                     continue
 
