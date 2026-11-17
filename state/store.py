@@ -1,7 +1,7 @@
-"""SQLite storage for one user's profile. Mirrors what Room will do on Android."""
+"""SQLite/Postgres-compatible storage for one user's profile."""
 import json
 
-from state.db import LOCAL_USER_ID, SCHEMA_VERSION, check_user_id, connect  # SCHEMA_VERSION is re-exported for tests
+from state.db import LOCAL_USER_ID, SCHEMA_VERSION, check_user_id, connect
 from state.profile import UserProfile
 
 
@@ -19,17 +19,12 @@ class ProfileStore:
         equipment = json.loads(row["equipment"]) if row["equipment"] is not None else None
         limitations = json.loads(row["limitations"]) if row["limitations"] is not None else []
         return UserProfile(
-            name=row["name"],
-            age=row["age"],
-            height_cm=row["height_cm"],
-            weight_kg=row["weight_kg"],
-            goal=row["goal"],
-            experience=row["experience"],
-            equipment=equipment,
-            session_minutes=row["session_minutes"],
-            limitations=limitations,
-            screening=row["screening"],
-            activity_level=row["activity_level"],
+            name=row["name"], age=row["age"], sex=row["sex"] or "unspecified",
+            height_cm=row["height_cm"], weight_kg=row["weight_kg"],
+            waist_cm=row["waist_cm"], neck_cm=row["neck_cm"], hip_cm=row["hip_cm"],
+            goal=row["goal"], experience=row["experience"], equipment=equipment,
+            session_minutes=row["session_minutes"], limitations=limitations,
+            screening=row["screening"], activity_level=row["activity_level"],
             dietary_pattern=row["dietary_pattern"],
             preferred_foods=json.loads(row["preferred_foods"] or "[]"),
             excluded_foods=json.loads(row["excluded_foods"] or "[]"),
@@ -41,22 +36,21 @@ class ProfileStore:
 
     def save(self, profile: UserProfile) -> None:
         equipment = json.dumps(profile.equipment) if profile.equipment is not None else None
-        preferred_foods = json.dumps(profile.preferred_foods)
-        excluded_foods = json.dumps(profile.excluded_foods)
-        allergies = json.dumps(profile.allergies)
-        intolerances = json.dumps(profile.intolerances)
         self.conn.execute(
             """INSERT OR REPLACE INTO user_profile
-                   (user_id, name, age, height_cm, weight_kg, goal, experience, equipment,
-                    session_minutes, limitations, screening, activity_level, dietary_pattern,
-                    preferred_foods, excluded_foods, allergies, intolerances, meals_per_day,
-                    daily_food_budget_inr)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (self.user_id, profile.name, profile.age, profile.height_cm, profile.weight_kg,
+               (user_id, name, age, sex, height_cm, weight_kg, waist_cm, neck_cm, hip_cm,
+                goal, experience, equipment, session_minutes, limitations, screening,
+                activity_level, dietary_pattern, preferred_foods, excluded_foods,
+                allergies, intolerances, meals_per_day, daily_food_budget_inr)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (self.user_id, profile.name, profile.age, profile.sex, profile.height_cm,
+             profile.weight_kg, profile.waist_cm, profile.neck_cm, profile.hip_cm,
              profile.goal, profile.experience, equipment, profile.session_minutes,
              json.dumps(profile.limitations), profile.screening, profile.activity_level,
-             profile.dietary_pattern, preferred_foods, excluded_foods, allergies,
-             intolerances, profile.meals_per_day, profile.daily_food_budget_inr),
+             profile.dietary_pattern, json.dumps(profile.preferred_foods),
+             json.dumps(profile.excluded_foods), json.dumps(profile.allergies),
+             json.dumps(profile.intolerances), profile.meals_per_day,
+             profile.daily_food_budget_inr),
         )
         self.conn.commit()
 
