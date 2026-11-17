@@ -211,7 +211,7 @@ class HybridLLM:
                 body["response_format"] = {"type": "json_object"}
 
             attempted += 1
-            payload_bytes = len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
+            payload_bytes = len(json.dumps(body).encode("utf-8"))
             logger.info(
                 "Cloud LLM attempting provider=%s model=%s "
                 "timeout_s=%s remaining_s=%s payload_bytes=%s max_tokens=%s",
