@@ -44,6 +44,8 @@ def _workout_weeks(program) -> list[dict]:
                 sets = getattr(exercise, "sets", None)
                 rep_min = getattr(exercise, "rep_min", None)
                 rep_max = getattr(exercise, "rep_max", None)
+                aim_low = getattr(exercise, "aim_low", None)
+                aim_high = getattr(exercise, "aim_high", None)
                 rest_seconds = getattr(exercise, "rest_seconds", None)
                 unit = getattr(exercise, "unit", "reps")
                 if (
@@ -60,6 +62,8 @@ def _workout_weeks(program) -> list[dict]:
                     "sets": sets,
                     "rep_min": rep_min,
                     "rep_max": rep_max,
+                    "aim_low": aim_low if isinstance(aim_low, int) else None,
+                    "aim_high": aim_high if isinstance(aim_high, int) else None,
                     "unit": unit,
                     "rest_seconds": rest_seconds,
                 })
