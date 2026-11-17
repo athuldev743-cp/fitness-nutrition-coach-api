@@ -1,4 +1,4 @@
-﻿from agent.cloud_llm import CloudOnlyLLM, LLMUnavailable
+from agent.cloud_llm import CloudOnlyLLM, LLMUnavailable
 from agent.model_registry import MODEL_REGISTRY
 import pytest
 
@@ -183,3 +183,19 @@ def test_truncated_reply_does_not_start_cooldown():
     result = llm.create_chat_completion(messages=msgs, max_tokens=100)
     assert result["choices"][0]["message"]["content"] == "ok"
     assert calls["n"] == 4  # the second request tried a model instead of skipping all three
+
+
+def test_explicit_max_tokens_budget_is_preserved():
+    calls = []
+
+    def post(url, key, body, timeout):
+        calls.append(body["max_tokens"])
+        return _reply()
+
+    llm = CloudOnlyLLM(post=post, env={"GROQ_API_KEY": "groq-test"})
+    llm.create_chat_completion(
+        messages=[{"role": "user", "content": "Explain protein"}],
+        max_tokens=350,
+    )
+
+    assert calls == [350]
