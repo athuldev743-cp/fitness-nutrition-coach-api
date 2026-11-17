@@ -4,7 +4,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # Rows that predate multi-user support, and the default owner for single-user use (CLI, MCP, demos).
 LOCAL_USER_ID = "local"
@@ -363,6 +363,18 @@ def migrate(conn: sqlite3.Connection) -> None:
                 "intolerances": "TEXT NOT NULL DEFAULT '[]'",
                 "meals_per_day": "INTEGER NOT NULL DEFAULT 3",
                 "daily_food_budget_inr": "INTEGER",
+            }
+            for column, declaration in additions.items():
+                if not _has_column(conn, "user_profile", column):
+                    conn.execute(f"ALTER TABLE user_profile ADD COLUMN {column} {declaration}")
+
+        if version < 11:
+            # Optional body-composition inputs; NULL preserves existing users unchanged.
+            additions = {
+                "sex": "TEXT NOT NULL DEFAULT 'unspecified'",
+                "waist_cm": "REAL",
+                "neck_cm": "REAL",
+                "hip_cm": "REAL",
             }
             for column, declaration in additions.items():
                 if not _has_column(conn, "user_profile", column):

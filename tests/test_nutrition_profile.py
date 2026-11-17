@@ -82,7 +82,7 @@ def test_v9_profile_migrates_without_losing_existing_workout_data(tmp_path):
         assert loaded.allergies == []
         assert loaded.meals_per_day == 3
         assert loaded.daily_food_budget_inr is None
-        assert store.conn.execute("PRAGMA user_version").fetchone()[0] == 10
+        assert store.conn.execute("PRAGMA user_version").fetchone()[0] == 11
     finally:
         store.close()
 
@@ -141,6 +141,7 @@ def test_postgres_v9_schema_migration_adds_all_nutrition_columns(monkeypatch):
     for column in (
         "activity_level", "dietary_pattern", "preferred_foods", "excluded_foods",
         "allergies", "intolerances", "meals_per_day", "daily_food_budget_inr",
+        "sex", "waist_cm", "neck_cm", "hip_cm",
     ):
         assert f"ADD COLUMN IF NOT EXISTS {column}" in statements
     assert "INSERT INTO schema_migrations" in statements
