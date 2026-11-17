@@ -14,11 +14,11 @@ TODAY = date(2026, 11, 16)
 
 def make_program():
     squat = SimpleNamespace(
-        name="Barbell squat", sets=3, rep_min=8, rep_max=12,
+        name="Barbell squat", sets=3, rep_min=8, rep_max=12, aim_low=8, aim_high=10,
         unit="reps", rest_seconds=90,
     )
     row_exercise = SimpleNamespace(
-        name="Dumbbell row", sets=3, rep_min=10, rep_max=12,
+        name="Dumbbell row", sets=3, rep_min=10, rep_max=12, aim_low=10, aim_high=12,
         unit="reps", rest_seconds=75,
     )
     lower = SimpleNamespace(
@@ -164,6 +164,7 @@ def test_context_includes_saved_programme_and_exercise_prescriptions():
     assert lower.exercises[0].name == "Barbell squat"
     assert lower.exercises[0].sets == 3
     assert (lower.exercises[0].rep_min, lower.exercises[0].rep_max) == (8, 12)
+    assert (lower.exercises[0].aim_low, lower.exercises[0].aim_high) == (8, 10)
     assert lower.exercises[0].rest_seconds == 90
 
 
