@@ -67,8 +67,8 @@ def test_profile_store_round_trips_new_body_measurements():
         store.close()
 
 
-def test_legacy_profile_defaults_new_fields_without_losing_profile():
-    store = ProfileStore()
+def test_legacy_profile_defaults_new_fields_without_losing_profile(tmp_path):
+    store = ProfileStore(tmp_path / "legacy.db", user_id="legacy")
     try:
         store.conn.execute(
             """INSERT INTO user_profile
@@ -78,14 +78,10 @@ def test_legacy_profile_defaults_new_fields_without_losing_profile():
                        NULL, 45, '[]', 'not_asked')"""
         )
         store.conn.commit()
-        legacy = ProfileStore(user_id="legacy")
-        try:
-            profile = legacy.get()
-            assert profile.sex == "unspecified"
-            assert profile.waist_cm is None
-            assert profile.neck_cm is None
-            assert profile.hip_cm is None
-        finally:
-            legacy.close()
+        profile = store.get()
+        assert profile.sex == "unspecified"
+        assert profile.waist_cm is None
+        assert profile.neck_cm is None
+        assert profile.hip_cm is None
     finally:
         store.close()
