@@ -43,6 +43,8 @@ class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
     today: date | None = None
     agent: str | None = Field(default=None, pattern="^(fitness|nutrition)$")
+    # The user's answer to "what's your activity level?" (typed or picked). Saved to the profile.
+    activity_level: str | None = Field(default=None, max_length=60)
 
 
 class SyncIn(BaseModel):
@@ -160,7 +162,7 @@ def sync_up(body: SyncIn, user: str = Depends(current_user)):
         close(s)
 
 
-def run_chat(user, text, today=None, agent=None):
+def run_chat(user, text, today=None, agent=None, activity_level=None):
     """Run the authenticated request through the LangGraph domain orchestrator."""
     started = time.perf_counter()
     from agent.contracts import AgentName, AgentRequest, AgentStatus
@@ -172,6 +174,24 @@ def run_chat(user, text, today=None, agent=None):
     s = stores(user)
     try:
         profile = s["profile"].get()
+
+        if activity_level is not None:
+            from agent.activity import ACTIVITY_QUESTION_RETRY, activity_options, parse_activity_level
+            level = parse_activity_level(activity_level)
+            if level is None:
+                return {
+                    "status": "needs_info", "tool": "nutrition_agent", "agent": "nutrition",
+                    "reply": ACTIVITY_QUESTION_RETRY, "confirm_token": None,
+                    "metadata": {"nutrition": {
+                        "pipeline_stage": "activity_gate", "needs": "activity_level",
+                        "options": activity_options(),
+                    }},
+                }
+            if profile is not None:
+                profile = s["profile"].update(activity_level=level)
+            else:
+                # A profile needs a name, so with none saved the answer applies to this request only.
+                profile = UserProfile(name="User", activity_level=level)
 
         def fitness_handler(agent_request):
             return handle_message(
@@ -269,7 +289,7 @@ def run_chat(user, text, today=None, agent=None):
 
 @app.post("/v1/chat")
 def chat(body: ChatIn, user: str = Depends(current_user)):
-    return run_chat(user, body.message, _client_today(body.today), body.agent)
+    return run_chat(user, body.message, _client_today(body.today), body.agent, body.activity_level)
 
 
 _SENT = re.compile(r"(?<=[.!?])\s+")
@@ -281,7 +301,7 @@ def sse(event, data):
 
 @app.post("/v1/chat/stream")
 def chat_stream(body: ChatIn, user: str = Depends(current_user)):
-    result = run_chat(user, body.message, _client_today(body.today), body.agent)
+    result = run_chat(user, body.message, _client_today(body.today), body.agent, body.activity_level)
 
     def gen():
         # safety / scope / plans / tools are deterministic and already validated: one complete event.
@@ -291,7 +311,9 @@ def chat_stream(body: ChatIn, user: str = Depends(current_user)):
                 if part.strip():
                     yield sse("sentence", {"text": part.strip()})
         else:
-            yield sse("message", {"text": result["reply"], "status": result["status"], "confirm_token": result.get("confirm_token")})
+            yield sse("message", {"text": result["reply"], "status": result["status"],
+                                  "confirm_token": result.get("confirm_token"),
+                                  "metadata": result.get("metadata")})
         yield sse("done", {"status": result["status"]})
 
     return StreamingResponse(gen(), media_type="text/event-stream")
