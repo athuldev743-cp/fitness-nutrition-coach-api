@@ -19,9 +19,23 @@ from agent.contracts import (
     AgentStatus,
     EvidenceReference,
 )
+from agent.activity import (
+    ACTIVITY_QUESTION_NO_PLAN,
+    activity_options,
+    derive_activity_level,
+)
 from agent.interfaces import DomainAgent
 from rag.nutrition_retrieval import search_nutrition
 
+# Requests that ask for a personalised diet. These need an activity level, either from the
+# saved workout plan or from the user, before the agent builds anything.
+_DIET_PLAN_REQUEST = re.compile(
+    r"\b(?:diet|meal|nutrition|eating)\s+(?:plan|chart|schedule|routine)\b|"
+    r"\bmeal\s+prep\b|\b(?:calorie|macro)\s+targets?\b|"
+    r"\b(?:create|build|make|design|give\s+me|suggest|recommend)\s+(?:me\s+)?(?:a\s+|an\s+|my\s+)?"
+    r"(?:\w+\s+)?(?:diet|meal)\b",
+    re.IGNORECASE,
+)
 _CITATION = re.compile(r"\[(S\d+)\]")
 _ANY_SOURCE_TAG = re.compile(r"\[S\d+\]")
 _PERSONALIZED_REQUEST = re.compile(
@@ -80,6 +94,9 @@ Scope and safety:
 - When creating a meal plan, structure it around meals_per_day. Respect daily_food_budget_inr
   as a daily INR budget; never invent food prices or claim a plan fits the budget without
   adequate price evidence.
+- activity_level_from_workout_plan, when present, was derived by code from the user's saved
+  workout plan (sessions per week) because the user has not stated an activity level. Use it as
+  the activity level and say that it is based on their workout plan.
 - Use age, height, weight, activity level and goal only when relevant and actually supplied.
   Do not invent calorie or macro targets. If required data or supporting evidence is missing,
   explain what is missing and ask a focused question.
@@ -113,6 +130,18 @@ class NutritionAgent:
         if not request.message.strip():
             return self._result(request, AgentStatus.NEEDS_CLARIFICATION,
                                 "Please ask a nutrition question.")
+
+        if self._needs_activity_level(request):
+            # Deterministic and answered before retrieval or any model call. A question to the
+            # user carries no citations, so it must not go through the citation contract.
+            return self._result(
+                request, AgentStatus.NEEDS_CLARIFICATION, ACTIVITY_QUESTION_NO_PLAN,
+                metadata={
+                    "pipeline_stage": "activity_gate",
+                    "needs": "activity_level",
+                    "options": activity_options(),
+                },
+            )
 
         retrieval_query = self._build_retrieval_query(request)
         try:
@@ -172,7 +201,16 @@ class NutritionAgent:
             )
 
         context = "\n\n".join(context_parts)[:MAX_CONTEXT_CHARS]
-        profile_context = self._format_profile(request.profile)
+        derived_activity = None
+        if (
+            request.training_context is not None
+            and request.profile is not None
+            and request.profile.activity_level == "unspecified"
+        ):
+            derived_activity = derive_activity_level(request.training_context.sessions_per_week)
+        profile_context = self._format_profile(
+            request.profile, derived_activity_level=derived_activity
+        )
         training_section = self._format_training(request.training_context)
         fitness_section = self._format_fitness(request.fitness_context)
         allowed = {f"S{i}" for i in range(1, len(evidence) + 1)}
@@ -281,6 +319,16 @@ class NutritionAgent:
         )
 
     @staticmethod
+    def _needs_activity_level(request: AgentRequest) -> bool:
+        """True for a personalised diet request with no workout plan and no stated activity level."""
+        if not _DIET_PLAN_REQUEST.search(request.message):
+            return False
+        if request.training_context is not None or request.fitness_context:
+            return False
+        profile = request.profile
+        return profile is None or profile.activity_level == "unspecified"
+
+    @staticmethod
     def _build_retrieval_query(request: AgentRequest) -> str:
         """Add saved profile and workout terms to personalized nutrition searches."""
         query = request.message.strip()
@@ -330,7 +378,9 @@ class NutritionAgent:
         return query[:2000]
 
     @staticmethod
-    def _format_profile(profile: UserProfile | None) -> str:
+    def _format_profile(
+        profile: UserProfile | None, derived_activity_level: str | None = None
+    ) -> str:
         if profile is None:
             return "No saved profile is available. Do not assume personal details."
         profile_data = {
@@ -351,6 +401,8 @@ class NutritionAgent:
             "meals_per_day": profile.meals_per_day,
             "daily_food_budget_inr": profile.daily_food_budget_inr,
         }
+        if derived_activity_level:
+            profile_data["activity_level_from_workout_plan"] = derived_activity_level
         return json.dumps(profile_data, ensure_ascii=False)
 
     @staticmethod

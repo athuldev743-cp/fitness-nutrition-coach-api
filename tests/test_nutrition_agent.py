@@ -252,6 +252,7 @@ def test_personalized_retrieval_includes_allergy_and_intolerance_context():
     profile = UserProfile(
         name="Test User",
         goal="muscle",
+        activity_level="moderately_active",  # a diet plan needs one; without it the agent asks first
         dietary_pattern="vegetarian",
         allergies=["peanut"],
         intolerances=["lactose"],
