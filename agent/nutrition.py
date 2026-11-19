@@ -36,6 +36,17 @@ _DIET_PLAN_REQUEST = re.compile(
     r"(?:\w+\s+)?(?:diet|meal)\b",
     re.IGNORECASE,
 )
+# Greetings and thanks carry no nutrition question. Answering them from sources would fail the
+# citation check, so they are answered directly.
+_SMALL_TALK = re.compile(
+    r"^\s*(?:hi+|hello+|hey+|hola|namaste|yo|good\s+(?:morning|afternoon|evening)|"
+    r"thanks?(?:\s+you)?|thank\s+you|ok(?:ay)?|cool|great|bye)[\s!.,?]*$",
+    re.IGNORECASE,
+)
+SMALL_TALK_REPLY = (
+    "Hi! I can help with food and nutrition, such as protein intake, meals, or your diet plan. "
+    "What would you like to know?"
+)
 _CITATION = re.compile(r"\[(S\d+)\]")
 _ANY_SOURCE_TAG = re.compile(r"\[S\d+\]")
 _PERSONALIZED_REQUEST = re.compile(
@@ -131,6 +142,12 @@ class NutritionAgent:
             return self._result(request, AgentStatus.NEEDS_CLARIFICATION,
                                 "Please ask a nutrition question.")
 
+        if _SMALL_TALK.match(request.message):
+            return self._result(
+                request, AgentStatus.NEEDS_CLARIFICATION, SMALL_TALK_REPLY,
+                metadata={"pipeline_stage": "small_talk"},
+            )
+
         if self._needs_activity_level(request):
             # Deterministic and answered before retrieval or any model call. A question to the
             # user carries no citations, so it must not go through the citation contract.
@@ -216,6 +233,7 @@ class NutritionAgent:
         allowed = {f"S{i}" for i in range(1, len(evidence) + 1)}
         last_diagnostic: dict[str, Any] = {}
         served_by: list[dict[str, Any]] = []
+        previous_answer: str | None = None
 
         for attempt in range(1, MAX_CITATION_ATTEMPTS + 1):
             try:
@@ -237,6 +255,9 @@ class NutritionAgent:
                     {"role": "user", "content": request.message.strip()},
                 ]
                 if attempt > 1:
+                    # The retry asks the model to rewrite its answer, so it must see that answer.
+                    if previous_answer:
+                        messages.append({"role": "assistant", "content": previous_answer})
                     messages.append({
                         "role": "user",
                         "content": (
@@ -309,6 +330,7 @@ class NutritionAgent:
                     request, AgentStatus.OK, answer, evidence=evidence,
                     metadata=last_diagnostic,
                 )
+            previous_answer = answer
 
         return self._result(
             request, AgentStatus.UNAVAILABLE,

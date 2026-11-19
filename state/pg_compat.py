@@ -4,7 +4,7 @@ import os
 import re
 from datetime import datetime
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 class Row(tuple):
@@ -67,8 +67,9 @@ DDL = [
     "CREATE TABLE accounts (user_id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, pw_hash TEXT NOT NULL, created_at BIGINT NOT NULL, failed INTEGER NOT NULL DEFAULT 0, locked_until BIGINT NOT NULL DEFAULT 0)",
     "CREATE TABLE refresh_tokens (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at BIGINT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0)",
     "CREATE INDEX idx_refresh_user ON refresh_tokens(user_id)",
+    "CREATE TABLE IF NOT EXISTS diet_plans (user_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, fingerprint TEXT NOT NULL, data TEXT NOT NULL)",
 ]
-TABLES = "user_profile, workouts, set_logs, programs, program_sessions, traces, deleted_records, accounts, refresh_tokens"
+TABLES = "user_profile, workouts, set_logs, programs, program_sessions, traces, deleted_records, accounts, refresh_tokens, diet_plans"
 
 _UPSERT = re.compile(r"INSERT OR REPLACE INTO (\w+)\s*\((.*?)\)\s*VALUES\s*\((.*?)\)\s*$", re.S | re.I)
 
@@ -198,6 +199,10 @@ def _open_schema():
             raw.execute("ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS hip_cm DOUBLE PRECISION")
             raw.execute("INSERT INTO schema_migrations (version, applied_at) VALUES (%s, %s)", (11, datetime.now().isoformat(timespec="seconds")))
             version = 11
+        if version < 12:
+            raw.execute("CREATE TABLE IF NOT EXISTS diet_plans (user_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, fingerprint TEXT NOT NULL, data TEXT NOT NULL)")
+            raw.execute("INSERT INTO schema_migrations (version, applied_at) VALUES (%s, %s)", (12, datetime.now().isoformat(timespec="seconds")))
+            version = 12
         raw.execute("SELECT pg_advisory_unlock(727)")
         if version != SCHEMA_VERSION:
             raise RuntimeError(f"database schema version {version} does not match code version {SCHEMA_VERSION}")

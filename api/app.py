@@ -404,6 +404,109 @@ def put_profile(body: ProfileIn, user: str = Depends(current_user)):
         close(s)
 
 
+class DietPlanIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    activity_level: str | None = Field(default=None, max_length=60)  # the user's answer, typed or picked
+    refresh: bool = False                                            # rebuild even if nothing changed
+    today: date | None = None
+
+
+def diet_store(user):
+    from state.diet import DietPlanStore
+    return DietPlanStore(DB, user_id=user)
+
+
+def _diet_view(saved, profile, training):
+    """The saved plan (marked stale when its inputs changed) plus what is still missing."""
+    from agent.diet_plan import fingerprint, readiness
+    plan = None
+    if saved:
+        plan = {
+            "text": saved.get("text", ""),
+            "created_at": saved.get("created_at"),
+            "evidence": saved.get("evidence", []),
+            "activity_level": saved.get("activity_level"),
+            "activity_source": saved.get("activity_source"),
+            "stale": saved.get("fingerprint") != fingerprint(profile, training),
+        }
+    return {"plan": plan, "readiness": readiness(profile, training)}
+
+
+@app.get("/v1/diet/plan")
+def get_diet_plan(today: date | None = None, user: str = Depends(current_user)):
+    """The user's current diet plan, if any, and the questions still open. Always 200."""
+    from agent.training_context import build_training_context
+    s = stores(user)
+    d = None
+    try:
+        d = diet_store(user)
+        profile = s["profile"].get()
+        training = build_training_context(s["programs"], _client_today(today))
+        saved = d.get()
+        return {"status": "ok" if saved else "none", "reply": None, **_diet_view(saved, profile, training)}
+    finally:
+        if d is not None:
+            d.close()
+        close(s)
+
+
+@app.post("/v1/diet/plan")
+def make_diet_plan(body: DietPlanIn = DietPlanIn(), user: str = Depends(current_user)):
+    """Create (or refresh) the diet plan from the saved profile and workout plan.
+
+    status: ok | needs_info | unavailable | refused | error. A plan is saved only for a source-cited answer.
+    """
+    from agent.activity import ACTIVITY_QUESTION_RETRY, parse_activity_level
+    from agent.contracts import AgentRequest, AgentStatus
+    from agent.diet_plan import DIET_REQUEST_MESSAGE, effective_activity, fingerprint, readiness
+    from agent.nutrition import NutritionAgent
+    from agent.training_context import build_training_context
+    today = _client_today(body.today)
+    s = stores(user)
+    d = None
+    try:
+        d = diet_store(user)
+        profile = s["profile"].get()
+        saved = d.get()
+        if profile is None:
+            training = build_training_context(s["programs"], today)
+            return {"status": "needs_info", "reply": "Please finish your profile first.",
+                    **_diet_view(saved, None, training)}
+        if body.activity_level is not None:
+            level = parse_activity_level(body.activity_level)
+            if level is None:
+                training = build_training_context(s["programs"], today)
+                return {"status": "needs_info", "reply": ACTIVITY_QUESTION_RETRY,
+                        **_diet_view(saved, profile, training)}
+            profile = s["profile"].update(activity_level=level)
+        training = build_training_context(s["programs"], today)
+        if not readiness(profile, training)["ready"]:
+            return {"status": "needs_info", "reply": "A few details are needed before I can make your plan.",
+                    **_diet_view(saved, profile, training)}
+        fp = fingerprint(profile, training)
+        if saved and saved.get("fingerprint") == fp and not body.refresh:
+            return {"status": "ok", "reply": None, **_diet_view(saved, profile, training)}
+        result = NutritionAgent(model()).run(AgentRequest(
+            user_id=user, message=DIET_REQUEST_MESSAGE, profile=profile, today=today, training_context=training,
+        ))
+        if result.status is not AgentStatus.OK:
+            status = {AgentStatus.UNAVAILABLE: "unavailable", AgentStatus.REFUSED: "refused",
+                      AgentStatus.NEEDS_CLARIFICATION: "needs_info"}.get(result.status, "error")
+            return {"status": status, "reply": result.message, **_diet_view(saved, profile, training)}
+        level, source = effective_activity(profile, training)
+        d.save({
+            "text": result.message,
+            "evidence": [{"source": e.source, "page": e.page, "chunk_number": e.chunk_number} for e in result.evidence],
+            "activity_level": level,
+            "activity_source": source,
+        }, fp)
+        return {"status": "ok", "reply": None, **_diet_view(d.get(), profile, training)}
+    finally:
+        if d is not None:
+            d.close()
+        close(s)
+
+
 @app.get("/v1/profile/metrics")
 def get_profile_metrics(user: str = Depends(current_user)):
     """Return deterministic estimates from saved profile inputs; missing inputs stay null."""

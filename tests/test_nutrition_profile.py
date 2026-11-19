@@ -82,7 +82,7 @@ def test_v9_profile_migrates_without_losing_existing_workout_data(tmp_path):
         assert loaded.allergies == []
         assert loaded.meals_per_day == 3
         assert loaded.daily_food_budget_inr is None
-        assert store.conn.execute("PRAGMA user_version").fetchone()[0] == 11
+        assert store.conn.execute("PRAGMA user_version").fetchone()[0] == 12
     finally:
         store.close()
 
