@@ -308,3 +308,10 @@ def test_no_profile_yet_asks_to_finish_it(harness):
 def test_unknown_fields_are_rejected(harness):
     h = harness(full_profile())
     assert h.client.post("/v1/diet/plan", json={"message": "hack"}).status_code == 422
+
+
+def test_agent_result_accepts_a_full_length_diet_plan():
+    from uuid import uuid4
+    from agent.contracts import AgentResult, AgentName, AgentStatus
+    r = AgentResult(request_id=uuid4(), agent=list(AgentName)[0], status=AgentStatus.OK, message="x" * 12000)
+    assert len(r.message) == 12000

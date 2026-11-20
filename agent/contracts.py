@@ -143,7 +143,8 @@ class AgentResult(BaseModel):
     request_id: UUID
     agent: AgentName
     status: AgentStatus
-    message: str = Field(min_length=1, max_length=4000)
+    # Diet plans are long (up to ~3500 tokens), so this is well above a chat reply.
+    message: str = Field(min_length=1, max_length=16000)
     evidence: list[EvidenceReference] = Field(default_factory=list, max_length=20)
     metadata: dict = Field(default_factory=dict)
 
