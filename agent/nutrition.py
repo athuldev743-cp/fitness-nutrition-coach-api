@@ -119,6 +119,26 @@ Return plain text, not JSON.
 """
 
 
+# Added to the system prompt for diet-plan requests so the mobile app can show cards.
+DIET_LAYOUT_PROMPT = """
+
+DIET PLAN LAYOUT (required). Write the plan in EXACTLY this markdown layout, with these headings:
+## Summary
+Two short sentences on the approach, mentioning the activity level and goal.
+## Daily targets
+- Label: value   (one line each; only targets the sources support; otherwise omit this section)
+## Meals
+### 07:30 AM | Breakfast
+- Food item: portion   (one short line per item)
+(one ### block per meal, in time order, using meals_per_day, each with a clock time and a name)
+## Tips
+- One short practical tip per line (3 to 5 lines)
+## Note
+One sentence: this is general guidance and a registered dietitian can personalize it.
+Keep every line short. Put source labels like [S1] at the end of lines they support.
+"""
+
+
 class NutritionAgent:
     """Nutrition agent implementing the in-process DomainAgent contract."""
 
@@ -240,6 +260,7 @@ class NutritionAgent:
                 messages = [
                     {"role": "system", "content": (
                         SYSTEM_PROMPT
+                        + (DIET_LAYOUT_PROMPT if _DIET_PLAN_REQUEST.search(request.message) else "")
                         + ("\n\nFACTS:" if (
                             request.profile is not None
                             or request.training_context is not None

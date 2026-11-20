@@ -315,3 +315,8 @@ def test_agent_result_accepts_a_full_length_diet_plan():
     from agent.contracts import AgentResult, AgentName, AgentStatus
     r = AgentResult(request_id=uuid4(), agent=list(AgentName)[0], status=AgentStatus.OK, message="x" * 12000)
     assert len(r.message) == 12000
+
+
+def test_diet_plan_request_gets_the_card_layout_in_the_system_prompt():
+    from agent.nutrition import DIET_LAYOUT_PROMPT
+    assert "## Meals" in DIET_LAYOUT_PROMPT and "### 07:30 AM | Breakfast" in DIET_LAYOUT_PROMPT
