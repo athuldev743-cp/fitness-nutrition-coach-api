@@ -135,6 +135,12 @@ Two short sentences on the approach, mentioning the activity level and goal.
 - One short practical tip per line (3 to 5 lines)
 ## Note
 One sentence: this is general guidance and a registered dietitian can personalize it.
+Every meal MUST list real, concrete foods with a household portion (for example "Scrambled eggs: 3 eggs",
+"Grilled fish: 1 palm-sized fillet", "Cooked rice: 1 cup"). Build meals mainly from the user's preferred_foods
+and dietary pattern, and never use excluded_foods or allergens. Naming everyday foods and portions is allowed
+even when the sources do not list that exact food. Use the sources for the principles (protein, fibre, timing).
+Never write placeholders, template words or instructions such as "Food item", "Add a protein source" or
+"Choose a vegetable"; always name the actual food. Give calorie or macro numbers only when supported.
 Keep every line short. Put source labels like [S1] at the end of lines they support.
 """
 
