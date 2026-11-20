@@ -268,9 +268,12 @@ class NutritionAgent:
                             "If the evidence is insufficient, state that instead of guessing."
                         ),
                     })
+                # A full diet plan is long and reasoning models spend tokens thinking first,
+                # so plan requests get a larger budget than short Q&A answers.
+                answer_budget = 3500 if _DIET_PLAN_REQUEST.search(request.message) else 1000
                 completion = self.llm.create_chat_completion(
                     messages=messages,
-                    max_tokens=1000,
+                    max_tokens=answer_budget,
                     temperature=0.1,
                 )
                 served_by.append(dict(getattr(self.llm, "last", None) or {}))
